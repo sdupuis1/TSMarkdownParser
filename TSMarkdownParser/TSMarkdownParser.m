@@ -57,11 +57,18 @@
     return self;
 }
 
-+ (instancetype)standardParser {
++ (TSMarkdownParser *)standardParser {
 
     TSMarkdownParser *defaultParser = [TSMarkdownParser new];
 
     __weak TSMarkdownParser *weakParser = defaultParser;
+    
+    [defaultParser addImageParsingWithImageFormattingBlock:^(NSMutableAttributedString *attributedString, NSRange range) {
+        
+    }                       alternativeTextFormattingBlock:^(NSMutableAttributedString *attributedString, NSRange range) {
+        
+    }];
+    
     [defaultParser addParagraphParsingWithFormattingBlock:^(NSMutableAttributedString *attributedString, NSRange range) {
         [attributedString addAttribute:NSFontAttributeName
                                  value:weakParser.paragraphFont
@@ -131,11 +138,7 @@
     }];
 
 
-    [defaultParser addImageParsingWithImageFormattingBlock:^(NSMutableAttributedString *attributedString, NSRange range) {
-
-    }                       alternativeTextFormattingBlock:^(NSMutableAttributedString *attributedString, NSRange range) {
-
-    }];
+   
 
     return defaultParser;
 }
@@ -228,6 +231,12 @@ static NSString *const TSMarkdownHeaderRegex    = @"^(#{%i}\\s*)(?!#).*$";
         NSRange linkRange = NSMakeRange(imagePathStart, match.range.length+match.range.location- imagePathStart -1);
         NSString *imagePath = [attributedString.string substringWithRange:NSMakeRange(linkRange.location+1, linkRange.length-1)];
         UIImage *image = [UIImage imageNamed:imagePath];
+        if(image == nil)
+        {
+            NSURL *url = [NSURL URLWithString:imagePath];
+            NSData *imageData = [NSData dataWithContentsOfURL:url];
+            image = [UIImage imageWithData:imageData];
+        }
         if(image){
             [attributedString deleteCharactersInRange:match.range];
             NSTextAttachment *imageAttachment = [NSTextAttachment new];
@@ -257,17 +266,12 @@ static NSString *const TSMarkdownHeaderRegex    = @"^(#{%i}\\s*)(?!#).*$";
     }
 }
 
-- (NSAttributedString *)attributedStringFromMarkdown:(NSString *)markdown attributes:(NSDictionary *)attributes {
-    NSMutableAttributedString *mutableAttributedString = nil;
-    if (! attributes) {
-        mutableAttributedString = [[NSMutableAttributedString alloc] initWithString:markdown];
-    } else {
-        mutableAttributedString = [[NSMutableAttributedString alloc] initWithString:markdown attributes:attributes];
-    }
+- (NSAttributedString *)attributedStringFromMarkdown:(NSString *)markdown {
+    NSMutableAttributedString *mutableAttributedString = [[NSMutableAttributedString alloc] initWithString:markdown];
     if ( self.paragraphParsingBlock ) {
         self.paragraphParsingBlock(mutableAttributedString);
     }
-    
+
     @synchronized (self) {
         for (TSExpressionBlockPair *expressionBlockPair in self.parsingPairs) {
             NSTextCheckingResult *match;
@@ -277,10 +281,6 @@ static NSString *const TSMarkdownHeaderRegex    = @"^(#{%i}\\s*)(?!#).*$";
         }
     }
     return mutableAttributedString;
-}
-
-- (NSAttributedString *)attributedStringFromMarkdown:(NSString *)markdown {
-    return [self attributedStringFromMarkdown:markdown attributes:nil];
 }
 
 
