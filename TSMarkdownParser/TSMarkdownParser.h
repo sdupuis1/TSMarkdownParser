@@ -23,6 +23,7 @@ typedef void (^TSMarkdownParserFormattingBlock)(NSMutableAttributedString *attri
 @property (nonatomic, strong) UIFont *h5Font;
 @property (nonatomic, strong) UIFont *h6Font;
 @property (nonatomic, strong) UIColor *linkColor;
+@property (nonatomic, strong) UIColor *defaultTextColor;
 @property (nonatomic, copy) NSNumber *linkUnderlineStyle;
 
 + (instancetype)standardParser;
@@ -30,6 +31,8 @@ typedef void (^TSMarkdownParserFormattingBlock)(NSMutableAttributedString *attri
 - (NSAttributedString *)attributedStringFromMarkdown:(NSString *)markdown;
 
 - (NSAttributedString *)attributedStringFromMarkdown:(NSString *)markdown attributes:(NSDictionary *)attributes;
+
+- (NSTextCheckingResult *) getH6Range:(NSString *)rawMarkDown;
 
 - (void)addParsingRuleWithRegularExpression:(NSRegularExpression *)regularExpression withBlock:(TSMarkdownParserMatchBlock)block;
 
@@ -47,4 +50,7 @@ typedef void (^TSMarkdownParserFormattingBlock)(NSMutableAttributedString *attri
 
 - (void)addImageParsingWithImageFormattingBlock:(TSMarkdownParserFormattingBlock)formattingBlock alternativeTextFormattingBlock:(TSMarkdownParserFormattingBlock)alternativeFormattingBlock;
 
+- (void)addCenterFormattingBlock:(TSMarkdownParserFormattingBlock)formattingBlock;
+
++(void) addLineSpacing:(int)space string:(NSMutableAttributedString *)attributedString;
 @end

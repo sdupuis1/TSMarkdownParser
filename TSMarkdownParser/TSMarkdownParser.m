@@ -8,7 +8,6 @@
 
 #import <UIKit/UIKit.h>
 #import "TSMarkdownParser.h"
-
 @interface TSExpressionBlockPair : NSObject
 
 @property (nonatomic, strong) NSRegularExpression *regularExpression;
@@ -53,6 +52,7 @@
         _h6Font = [UIFont boldSystemFontOfSize:13];
         _linkColor = [UIColor blueColor];
         _linkUnderlineStyle = @(NSUnderlineStyleSingle);
+        _defaultTextColor = [UIColor blackColor];
     }
     return self;
 }
@@ -135,9 +135,20 @@
         [attributedString addAttribute:NSFontAttributeName
                                  value:weakParser.h6Font
                                  range:range];
+    [attributedString deleteCharactersInRange:NSMakeRange(range.location, range.length-6)];
     }];
 
-
+    
+    [defaultParser addCenterFormattingBlock:^(NSMutableAttributedString *attributedString, NSRange range) {
+        NSMutableParagraphStyle *paragraphStyle = NSMutableParagraphStyle.new;
+        paragraphStyle.alignment                = NSTextAlignmentCenter;
+        
+        [attributedString addAttribute:NSParagraphStyleAttributeName
+                                 value:paragraphStyle
+                                 range:range];
+    }];
+    
+   
    
 
     return defaultParser;
@@ -149,7 +160,16 @@ static NSString *const TSMarkdownListRegex      = @"^(\\*|\\+)[^\\*].+$";
 static NSString *const TSMarkdownLinkRegex      = @"(?<!\\!)\\[.*?\\]\\([^\\)]*\\)";
 static NSString *const TSMarkdownImageRegex     = @"\\!\\[.*?\\]\\(\\S*\\)";
 static NSString *const TSMarkdownHeaderRegex    = @"^(#{%i}\\s*)(?!#).*$";
+static NSString *const TSMarkdownCenterRegex    = @"(->){1}.*(<-){1}";
 
+- (NSTextCheckingResult *) getH6Range:(NSString *)rawMarkDown
+{
+    NSString *headerRegex = [NSString stringWithFormat:TSMarkdownHeaderRegex, 6];
+    NSRegularExpression *regex = [NSRegularExpression regularExpressionWithPattern:headerRegex options:NSRegularExpressionCaseInsensitive | NSRegularExpressionAnchorsMatchLines error:nil];
+    
+    NSTextCheckingResult *match = [regex firstMatchInString:rawMarkDown options:0 range:NSMakeRange(0, rawMarkDown.length)];
+    return match;
+}
 - (void)addParagraphParsingWithFormattingBlock:(void(^)(NSMutableAttributedString *attributedString, NSRange range))formattingBlock {
     self.paragraphParsingBlock = ^(NSMutableAttributedString *attributedString) {
         
@@ -259,7 +279,15 @@ static NSString *const TSMarkdownHeaderRegex    = @"^(#{%i}\\s*)(?!#).*$";
         }
     }];
 }
+- (void)addCenterFormattingBlock:(TSMarkdownParserFormattingBlock)formattingBlock{
 
+    NSRegularExpression *centerParsing = [NSRegularExpression regularExpressionWithPattern:TSMarkdownCenterRegex options:NSRegularExpressionCaseInsensitive error:nil];
+    [self addParsingRuleWithRegularExpression:centerParsing withBlock:^(NSTextCheckingResult *match, NSMutableAttributedString *attributedString) {
+        formattingBlock(attributedString, match.range);
+        [attributedString deleteCharactersInRange:NSMakeRange(match.range.location, 2)];
+        [attributedString deleteCharactersInRange:NSMakeRange(match.range.location+match.range.length-4, 2)];     }];
+    
+}
 - (void)addParsingRuleWithRegularExpression:(NSRegularExpression *)regularExpression withBlock:(TSMarkdownParserMatchBlock)block {
     @synchronized (self) {
         [self.parsingPairs addObject:[TSExpressionBlockPair pairWithRegularExpression:regularExpression block:block]];
@@ -268,6 +296,7 @@ static NSString *const TSMarkdownHeaderRegex    = @"^(#{%i}\\s*)(?!#).*$";
 
 - (NSAttributedString *)attributedStringFromMarkdown:(NSString *)markdown {
     NSMutableAttributedString *mutableAttributedString = [[NSMutableAttributedString alloc] initWithString:markdown];
+    [mutableAttributedString addAttribute:NSForegroundColorAttributeName value:self.defaultTextColor range:NSMakeRange(0, mutableAttributedString.length)];
     if ( self.paragraphParsingBlock ) {
         self.paragraphParsingBlock(mutableAttributedString);
     }
@@ -282,6 +311,30 @@ static NSString *const TSMarkdownHeaderRegex    = @"^(#{%i}\\s*)(?!#).*$";
     }
     return mutableAttributedString;
 }
++(void) addLineSpacing:(int)space string:(NSMutableAttributedString *)attributedString;
+{
+unsigned int length;
+NSRange effectiveRange;
+id attributeValue;
+length = [attributedString length];
+effectiveRange = NSMakeRange(0, 0);
 
-
+while (NSMaxRange(effectiveRange) < length)
+{
+    attributeValue = [attributedString attribute:NSParagraphStyleAttributeName
+                                         atIndex:NSMaxRange(effectiveRange) effectiveRange:&effectiveRange];
+    if([attributeValue isKindOfClass:[NSMutableParagraphStyle class]])
+    {
+        NSMutableParagraphStyle *style = (NSMutableParagraphStyle*)attributeValue;
+        [style setLineSpacing:5];
+        [attributedString addAttribute:NSParagraphStyleAttributeName value:style range:effectiveRange];
+    }
+    else if(attributeValue == nil)
+    {
+        NSMutableParagraphStyle *paragraphStyle = NSMutableParagraphStyle.new;
+        [paragraphStyle setLineSpacing:5];
+        [attributedString addAttribute:NSParagraphStyleAttributeName value:paragraphStyle range:effectiveRange];
+    }
+}
+}
 @end
