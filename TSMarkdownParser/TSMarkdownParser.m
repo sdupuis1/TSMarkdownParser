@@ -135,7 +135,7 @@
         [attributedString addAttribute:NSFontAttributeName
                                  value:weakParser.h6Font
                                  range:range];
-    [attributedString deleteCharactersInRange:NSMakeRange(range.location, range.length-6)];
+    [attributedString deleteCharactersInRange:NSMakeRange(range.location+7, range.length-7)];// 6 hashes plus space
     }];
 
     
@@ -181,24 +181,70 @@ static NSString *const TSMarkdownCenterRegex    = @"(->){1}.*(<-){1}";
     NSRegularExpression *boldParsing = [NSRegularExpression regularExpressionWithPattern:TSMarkdownStrongRegex options:NSRegularExpressionCaseInsensitive error:nil];
 
     [self addParsingRuleWithRegularExpression:boldParsing withBlock:^(NSTextCheckingResult *match, NSMutableAttributedString *attributedString) {
-
-        formattingBlock(attributedString, match.range);
-
-        [attributedString deleteCharactersInRange:NSMakeRange(match.range.location, 2)];
-        [attributedString deleteCharactersInRange:NSMakeRange(match.range.location+match.range.length-4, 2)];
-
+// add escape character and escape escape character to the mix.
+      if(![TSMarkdownParser isEscaped:match attribString:attributedString matchLength:2])
+       {
+           formattingBlock(attributedString, match.range);
+           int deletedBackslashCount = [TSMarkdownParser deleteEscapedBackslash:match attribString:attributedString];
+           [attributedString deleteCharactersInRange:NSMakeRange(match.range.location-(deletedBackslashCount>0?1:0), 2)];
+           [attributedString deleteCharactersInRange:NSMakeRange(match.range.location+match.range.length-4 - (deletedBackslashCount >1?deletedBackslashCount:deletedBackslashCount >0?deletedBackslashCount:0), 2)];
+       }
     }];
 }
-
++(int) deleteEscapedBackslash:(NSTextCheckingResult *)match attribString:(NSMutableAttributedString *)attributedString
+{
+    int deletedBackslashCount = 0;
+    // delete escaped backslashes
+    if([[attributedString.string substringWithRange:NSMakeRange(match.range.location -2, 1)] compare:@"\\"] == 0)
+    {
+        [attributedString deleteCharactersInRange:NSMakeRange(match.range.location-2, 1)];
+        deletedBackslashCount++;
+    }
+    if([[attributedString.string substringWithRange:NSMakeRange(match.range.location+match.range.length-3-deletedBackslashCount,1)] compare:@"\\"] == 0)
+    {
+        [attributedString deleteCharactersInRange:NSMakeRange(match.range.location+match.range.length-3-deletedBackslashCount, 1)];
+        deletedBackslashCount++;
+    }
+    return deletedBackslashCount;
+}
++(BOOL) isEscaped:(NSTextCheckingResult *)match attribString:(NSMutableAttributedString *)attributedString matchLength:(NSUInteger) tokenLength
+{
+    if( ((match.range.location > 0 && [[attributedString.string substringWithRange:NSMakeRange(match.range.location -1, 1)] compare:@"\\"] == 0) &&
+         (match.range.location > 1 && [[attributedString.string substringWithRange:NSMakeRange(match.range.location -2, 1)] compare:@"\\"] != 0)) ||
+       ((match.range.location+match.range.length-4 > 0 && [[attributedString.string substringWithRange:NSMakeRange(match.range.location+match.range.length-5, 1)] compare:@"\\"] == 0) &&
+        (match.range.location > 1 && [[attributedString.string substringWithRange:NSMakeRange(match.range.location+match.range.length-6,1)] compare:@"\\"] != 0)))
+    {
+        // if preceded by a backslash and backslash not escaped
+        NSUInteger location = match.range.location -1;
+        NSUInteger location2 = match.range.location+match.range.length-tokenLength -1;
+        
+        NSString *locS = [attributedString.string substringWithRange:NSMakeRange(location, 1)];
+        NSString *locS1 = [attributedString.string substringWithRange:NSMakeRange(location2, 1)];
+        if( match.range.location > 0 && [[attributedString.string substringWithRange:NSMakeRange(location, 1)] compare:@"\\"] == 0)
+        {
+            [attributedString deleteCharactersInRange:NSMakeRange(match.range.location-1, 1)];
+            location2--;
+        }
+        if(location2 > 0 && [[attributedString.string substringWithRange:NSMakeRange(location2, 1)] compare:@"\\"] == 0)
+        {
+            [attributedString deleteCharactersInRange:NSMakeRange(location2, 1)];
+        }
+        return YES;
+    }
+    return NO;
+}
 - (void)addEmphasisParsingWithFormattingBlock:(TSMarkdownParserFormattingBlock)formattingBlock {
     NSRegularExpression *emphasisParsing = [NSRegularExpression regularExpressionWithPattern:TSMarkdownEmRegex options:NSRegularExpressionCaseInsensitive error:nil];
 
     [self addParsingRuleWithRegularExpression:emphasisParsing withBlock:^(NSTextCheckingResult *match, NSMutableAttributedString *attributedString) {
-        formattingBlock(attributedString, match.range);
-
-        [attributedString deleteCharactersInRange:NSMakeRange(match.range.location, 1)];
-        [attributedString deleteCharactersInRange:NSMakeRange(match.range.location+match.range.length-2, 1)];
-
+        
+        if(![TSMarkdownParser isEscaped:match attribString:attributedString matchLength:1])
+        {
+            formattingBlock(attributedString, match.range);
+            int deletedBackslashCount = [TSMarkdownParser deleteEscapedBackslash:match attribString:attributedString];
+            [attributedString deleteCharactersInRange:NSMakeRange(match.range.location-(deletedBackslashCount>0?1:0), 1)];
+            [attributedString deleteCharactersInRange:NSMakeRange(match.range.location+match.range.length-2 - (deletedBackslashCount >1?deletedBackslashCount:deletedBackslashCount >0?deletedBackslashCount:0), 1)];
+        }
     }];
 }
 
@@ -240,6 +286,7 @@ static NSString *const TSMarkdownCenterRegex    = @"(->){1}.*(<-){1}";
     NSRegularExpression *headerExpression = [NSRegularExpression regularExpressionWithPattern:headerRegex options:NSRegularExpressionCaseInsensitive | NSRegularExpressionAnchorsMatchLines error:nil];
     [self addParsingRuleWithRegularExpression:headerExpression withBlock:^(NSTextCheckingResult *match, NSMutableAttributedString *attributedString) {
         formattingBlock(attributedString, match.range);
+        NSRange rr = [match rangeAtIndex:1];
         [attributedString deleteCharactersInRange:[match rangeAtIndex:1]];
     }];
 }
@@ -251,11 +298,19 @@ static NSString *const TSMarkdownCenterRegex    = @"(->){1}.*(<-){1}";
         NSRange linkRange = NSMakeRange(imagePathStart, match.range.length+match.range.location- imagePathStart -1);
         NSString *imagePath = [attributedString.string substringWithRange:NSMakeRange(linkRange.location+1, linkRange.length-1)];
         UIImage *image = [UIImage imageNamed:imagePath];
+        //imagePath can be both url or just a filename
         if(image == nil)
         {
+            // parse out to check if image filename is in local bundle otherwise go remote to fetch it.
             NSURL *url = [NSURL URLWithString:imagePath];
-            NSData *imageData = [NSData dataWithContentsOfURL:url];
-            image = [UIImage imageWithData:imageData];
+            NSString *parsedFileName = url.lastPathComponent;
+            NSString *imageName = [parsedFileName substringToIndex:(parsedFileName.length - (url.pathExtension.length == 0?0:url.pathExtension.length+1)) ];
+            image = [UIImage imageNamed:imageName];
+            if(image == nil)
+            {
+                NSData *imageData = [NSData dataWithContentsOfURL:url];
+                image = [UIImage imageWithData:imageData];
+            }
         }
         if(image){
             [attributedString deleteCharactersInRange:match.range];
@@ -304,8 +359,15 @@ static NSString *const TSMarkdownCenterRegex    = @"(->){1}.*(<-){1}";
     @synchronized (self) {
         for (TSExpressionBlockPair *expressionBlockPair in self.parsingPairs) {
             NSTextCheckingResult *match;
-            while((match = [expressionBlockPair.regularExpression firstMatchInString:mutableAttributedString.string options:0 range:NSMakeRange(0, mutableAttributedString.string.length)])){
-                expressionBlockPair.block(match, mutableAttributedString);
+            NSRange startRange = NSMakeRange(0, mutableAttributedString.string.length);
+            while((match = [expressionBlockPair.regularExpression firstMatchInString:mutableAttributedString.string options:0 range:startRange])){
+                NSRange matchRange = match.range;
+                    // if not \ escape then resume search after matched location, otherwise we may try to reconsume escaped characters.
+                    NSUInteger originalLength = mutableAttributedString.length;
+                    expressionBlockPair.block(match, mutableAttributedString);
+                    NSUInteger consumed =  originalLength - mutableAttributedString.length;
+                    NSUInteger start = (matchRange.location + matchRange.length) > consumed?matchRange.location + matchRange.length - consumed:0;
+                    startRange = NSMakeRange(start, mutableAttributedString.string.length - start);
             }
         }
     }
@@ -326,13 +388,13 @@ while (NSMaxRange(effectiveRange) < length)
     if([attributeValue isKindOfClass:[NSMutableParagraphStyle class]])
     {
         NSMutableParagraphStyle *style = (NSMutableParagraphStyle*)attributeValue;
-        [style setLineSpacing:5];
+        [style setLineSpacing:space];
         [attributedString addAttribute:NSParagraphStyleAttributeName value:style range:effectiveRange];
     }
     else if(attributeValue == nil)
     {
         NSMutableParagraphStyle *paragraphStyle = NSMutableParagraphStyle.new;
-        [paragraphStyle setLineSpacing:5];
+        [paragraphStyle setLineSpacing:space];
         [attributedString addAttribute:NSParagraphStyleAttributeName value:paragraphStyle range:effectiveRange];
     }
 }

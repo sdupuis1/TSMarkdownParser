@@ -53,4 +53,5 @@ typedef void (^TSMarkdownParserFormattingBlock)(NSMutableAttributedString *attri
 - (void)addCenterFormattingBlock:(TSMarkdownParserFormattingBlock)formattingBlock;
 
 +(void) addLineSpacing:(int)space string:(NSMutableAttributedString *)attributedString;
+
 @end
